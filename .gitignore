@@ -2,3 +2,6 @@ models/
 .ipynb_checkpoints/
 .DS_Store/
 .AppleDouble/
+data
+legacy/
+.DS_Store
