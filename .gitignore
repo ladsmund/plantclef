@@ -7,3 +7,4 @@ legacy/
 .DS_Store
 figures/
 *.pyc
+.idea
