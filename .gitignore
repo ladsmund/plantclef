@@ -6,3 +6,4 @@ data
 legacy/
 .DS_Store
 figures/
+*.pyc
