@@ -18,7 +18,8 @@ def conv_layer(bottom, dim, kernel_size, name, group=1, stride=1, pad=None):
         group=group,
         convolution_param=dict(
             num_output=dim, kernel_size=kernel_size,
-            stride=stride, pad=pad,
+            stride=stride,
+            pad=pad,
             weight_filler=dict(type="constant", value=0),
             bias_filler=dict(type="constant", value=0)))
 
@@ -40,6 +41,7 @@ def scat_layer(bottom, dim, kernel_size, name, group=1):
 
 
 def gen_prototxt(nangles, max_order, scales, kernel_size, data=L.Input(shape=dict(dim=[1, 1, 256, 256])),
+                 verbose=False,
                  output_path=None):
     n = caffe.NetSpec()
     n.data = data
@@ -70,7 +72,8 @@ def gen_prototxt(nangles, max_order, scales, kernel_size, data=L.Input(shape=dic
                 c = new_scat_layer(c0, s, dim_out, dim_in)
                 layer.append((c, s0 + [s]))
 
-                print "%s (%i)" % ("->".join(map(str, (s0 + [s]))), dim_out)
+                if verbose:
+                    print "%s (%i)" % ("->".join(map(str, (s0 + [s]))), dim_out)
 
         layers.append(layer)
 
