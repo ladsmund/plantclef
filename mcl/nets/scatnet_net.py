@@ -13,10 +13,7 @@ EltwiseParameter_EltwiseOp_SUM = 1
 EltwiseParameter_EltwiseOp_MAX = 2
 
 
-def conv_layer(bottom, dim, kernel_size, name, group=1, stride=1, pad=None):
-    if pad is None:
-        # pad = kernel_size // 2
-        pad = 0
+def conv_layer(bottom, dim, kernel_size, name, group=1, stride=1, pad=0):
     return L.Convolution(
         bottom,
         name=name,
@@ -45,64 +42,66 @@ def scat_layer(bottom, dim, kernel_size, name, group=1):
     return res_add
 
 
-def gen_prototxt(nangles, max_order, scales, kernel_size, data=L.Input(shape=dict(dim=[1, 1, 256, 256])),
+def gen_prototxt(nangles,
+                 max_order,
+                 scales,
+                 filter_size_factor=wavelet.DEFAULT_SIZE,
+                 data=L.Input(shape=dict(dim=[1, 1, 256, 256])),
                  verbose=False,
                  output_path=None):
     n = caffe.NetSpec()
     n.data = data
 
-    nscales = len(scales)
-    delta_offset = kernel_size // 2
-
-    global scat_count
     scat_count = -1
-
-    def new_scat_layer(input, id, dim_out, dim_in):
-        global scat_count
-        scat_count += 1
-        return scat_layer(input, dim=dim_out, group=dim_in, kernel_size=kernel_size,
-                          name='scat%i_%i_%ito%i' % (id, scat_count, dim_in, dim_out))
-
     dim_total = 1
-    layers = [[(data, [None],0)]]
+    layers = [[(data, [None], 0)]]
     for o in range(max_order):
         layer = []
-        for s in range(nscales):
+        for s in scales:
+            kernel_size = s * filter_size_factor
+            delta_offset = kernel_size // 2
+
             for c0, s0, offset in layers[-1]:
                 if s0[-1] is not None and s <= s0[-1]:
                     continue
-
+                scat_count += 1
                 dim_in = nangles ** o
                 dim_out = nangles ** (o + 1)
                 dim_total += dim_out
-                c = new_scat_layer(c0, s, dim_out, dim_in)
-                layer.append((c, s0 + [s], offset+delta_offset))
+                name = 'scat%i_%i_%ito%i' % (s, scat_count, dim_in, dim_out)
+
+                c = scat_layer(c0,
+                               dim=dim_out,
+                               kernel_size=kernel_size,
+                               name=name,
+                               group=dim_in)
+
+                layer.append((c, s0 + [s], offset + delta_offset))
 
                 if verbose:
-                    print "%s (%i)" % ("->".join(map(str, (s0 + [s]))), dim_out)
+                    print "%s:" % name
+                    print "  kernel size: %i" % kernel_size
+                    print "  %s (%i)" % ("->".join(map(str, (s0 + [s]))), dim_out)
 
         layers.append(layer)
 
+    if verbose:
+        print "Total output dimensionality: %i" % dim_total
 
+    # Crop the coefficients before concatenation
+    # The last coefficient is the smallest because it's having the highest order.
     last_coefficient = layers[-1][-1][0]
     max_offset = layers[-1][-1][2]
-
     coefficients = []
     for layer in layers:
         for c, _, offset in layer:
-            print c
-            coefficients.append(L.Crop(c, last_coefficient, offset=max_offset-offset))
-
-    # layers = zip(*reduce(operator.add, layers))[0]
-    # layers = [L.Crop(l, layers[-1]) for l in layers]
+            coefficients.append(L.Crop(c, last_coefficient, offset=max_offset - offset))
 
     concat = L.Concat(*coefficients)
 
-    print "Total output dimensionality: %i" % dim_total
-
-    stride = 2 ** (max(scales))
-    # dilation
-
+    # Do the final gaussian blur and resampling
+    kernel_size = scales[-1] * filter_size_factor
+    stride = scales[-1]
     c = conv_layer(concat,
                    dim=dim_total,
                    group=dim_total,
@@ -110,13 +109,8 @@ def gen_prototxt(nangles, max_order, scales, kernel_size, data=L.Input(shape=dic
                    name='psi',
                    stride=stride)
 
-    n.output = L.Crop(c, c, offset=0)
-    # n.output = L.Crop(c, crop_param=dict(offset=10))
-
-    # n.slices = L.Slice(n.output, slice_point=[10,20,30], ntop=1, axis=2)
-    # slices = L.Slice(n.output, slice_point=[10,20,30], ntop=1, axis=1)
-    # for i in range(4):
-    #     setattr(n, "test_%i"%i, slices[i])
+    n.output = c
+    # n.output = L.Crop(c, c, offset=0)
 
     proto_str = str(n.to_proto())
 
@@ -133,23 +127,25 @@ def gen_prototxt(nangles, max_order, scales, kernel_size, data=L.Input(shape=dic
 def generate_filters(net, **kwargs):
     nangles = kwargs['nangles']
     scales = kwargs['scales']
-    kernel_size = kwargs['kernel_size']
+    filter_size_factor = kwargs.get('filter_size_factor', wavelet.DEFAULT_SIZE)
 
     for i, s in enumerate(scales):
-        name = "scat%1i" % i
-
+        name = "scat%1i" % s
         keys = [k for k in net.params.keys() if name in k]
 
         for ai, a in enumerate(np.linspace(0, np.pi, nangles, endpoint=False)):
-            kernel = wavelet.morlet(2 ** (s), a, kernel_size + 1)
-            kernel = kernel[1:, 1:]
+            kernel_size = s * filter_size_factor
+            kernel = wavelet.morlet(s, a, kernel_size)
+
             for k in keys:
                 if '_real' in k:
                     net.params[k][0].data[ai::nangles, :, :, :] = np.real(kernel)
                 elif '_imag' in k:
                     net.params[k][0].data[ai::nangles, :, :, :] = np.imag(kernel)
 
-    gauss_kernel = wavelet.gauss_kernel(2 ** scales[-1], kernel_size + 1)[1:, 1:]
+    s = scales[-1]
+    kernel_size = s * filter_size_factor
+    gauss_kernel = wavelet.gauss_kernel(s, kernel_size)
     net.params['psi'][0].data[:, :, :, :] = gauss_kernel
 
 
@@ -162,12 +158,13 @@ def scatnet(**kwargs):
 if __name__ == '__main__':
 
     scale = 3
-    scales = range(scale)
+    scales = 2 ** np.arange(0, scale)
     max_order = 3
     nangles = 6
-    kernel_size = 15
+    filter_size_factor = 3
 
-    net = scatnet(scales=scales, max_order=max_order, nangles=nangles, kernel_size=kernel_size, verbose=True)
+    net = scatnet(scales=scales, max_order=max_order, nangles=nangles, verbose=True,
+                  filter_size_factor=filter_size_factor)
     print "\n\n" + "-" * 30
     for k in net.blobs.keys():
         if "split" in k:
