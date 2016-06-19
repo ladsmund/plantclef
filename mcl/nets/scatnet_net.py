@@ -46,14 +46,18 @@ def gen_prototxt(nangles,
                  max_order,
                  scales,
                  filter_size_factor=wavelet.DEFAULT_SIZE,
-                 data=L.Input(shape=dict(dim=[1, 1, 256, 256])),
+                 nchannels_input=3,
+                 data=None,
                  verbose=False,
                  output_path=None):
     n = caffe.NetSpec()
+    if data is None:
+        data = L.Input(shape=dict(dim=[1, nchannels_input, 256, 256]))
+
     n.data = data
 
     scat_count = -1
-    dim_total = 1
+    dim_total = nchannels_input
     layers = [[(data, [None], 0)]]
     for o in range(max_order):
         layer = []
@@ -65,8 +69,8 @@ def gen_prototxt(nangles,
                 if s0[-1] is not None and s <= s0[-1]:
                     continue
                 scat_count += 1
-                dim_in = nangles ** o
-                dim_out = nangles ** (o + 1)
+                dim_in = nchannels_input * nangles ** o
+                dim_out = nchannels_input * nangles ** (o + 1)
                 dim_total += dim_out
                 name = 'scat%i_%i_%ito%i' % (s, scat_count, dim_in, dim_out)
 
@@ -110,7 +114,6 @@ def gen_prototxt(nangles,
                    stride=stride)
 
     n.output = c
-    # n.output = L.Crop(c, c, offset=0)
 
     proto_str = str(n.to_proto())
 
@@ -153,6 +156,29 @@ def scatnet(**kwargs):
     net = caffe.Net(gen_prototxt(**kwargs), caffe.TEST)
     generate_filters(net, **kwargs)
     return net
+
+
+def split_to_input_channels(input, nangles,
+                 max_order,
+                 scales,
+                 nchannels_input=3):
+
+
+    dim_total = nchannels_input
+    layers = [[dim_total, 0]]
+    for o in range(max_order):
+        layer = []
+        for s in scales:
+
+            for c0, s0, offset in layers[-1]:
+                if s0[-1] is not None and s <= s0[-1]:
+                    continue
+                dim_out = nchannels_input * nangles ** (o + 1)
+                dim_total += dim_out
+
+                layer.append((dim_out, s0 + [s]))
+
+        layers.append(layer)
 
 
 if __name__ == '__main__':
