@@ -158,13 +158,15 @@ def scatnet(**kwargs):
     generate_filters(net, **kwargs)
     return net
 
+
 def get_arg_string(**kwargs):
     args = []
     args.append("a%s" % str(kwargs['nangles']))
     args.append("m%s" % str(kwargs['max_order']))
-    args.append("s%s" % "s".join(map(str,kwargs['scales'])))
+    args.append("s%s" % "s".join(map(str, kwargs['scales'])))
     args.append("f%s" % str(kwargs['filter_size_factor']))
     return "_".join(args)
+
 
 def get_layers_sizes(nangles,
                      max_order,
@@ -208,7 +210,7 @@ def process(*args, **kwargs):
 
     input_path = kwargs.pop('input_path')
 
-    output_dir_path = os.path.join(kwargs.pop('output_path'),get_arg_string(**kwargs))
+    output_dir_path = os.path.join(kwargs.pop('output_path'), get_arg_string(**kwargs))
     output_float_path = os.path.join(output_dir_path, 'float32')
     output_info_list = os.path.join(output_dir_path, 'list.txt')
     output_lmdb_path = os.path.join(output_dir_path, 'lmdb')
@@ -220,9 +222,12 @@ def process(*args, **kwargs):
     if not os.path.exists(output_float_path):
         os.makedirs(output_float_path)
 
-    image_infos = open(input_path, 'r').read().split('\n')[:140]
-
-    nimages = len(image_infos)
+    nimages = kwargs.pop('nimages', None)
+    image_infos = open(input_path, 'r').read().split('\n')
+    if nimages is None:
+        nimages = len(image_infos)
+    else:
+        image_infos = image_infos[:nimages]
 
     # Prepare network
     transform_param = dict(mirror=False, crop_size=227)
@@ -234,11 +239,11 @@ def process(*args, **kwargs):
                                               ntop=2)
     net = scatnet(data=species_data, **kwargs)
 
-
+    print "Output folder:\n %s" % output_dir_path
     print kwargs
 
     mean_coefficient = None
-    info_file = open(output_info_list,'w+')
+    info_file = open(output_info_list, 'w+')
 
     print "Generate Scattering Coefficients"
     t0 = time.time()
@@ -268,7 +273,6 @@ def process(*args, **kwargs):
 
         info_file.write("%s %s\n" % (file_path, label))
 
-
     print "Save mean coefficients and mean magnitude"
     mean_coefficient /= nimages
     mean_coefficient.tofile(output_mean_path)
@@ -289,6 +293,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--scale', type=int, default=3)
     parser.add_argument('-m', '--max_order', type=int, default=3)
     parser.add_argument('-v', '--verbose', type=bool, default=False)
+    parser.add_argument('--nimages', type=int, default=None)
     parser.add_argument('--filter_size_factor', type=int, default=2)
     args = parser.parse_args()
 
@@ -300,4 +305,5 @@ if __name__ == '__main__':
             max_order=args.max_order,
             nangles=args.nangles,
             verbose=args.verbose,
+            nimages=args.nimages,
             filter_size_factor=args.filter_size_factor)
