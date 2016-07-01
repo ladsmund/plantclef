@@ -62,7 +62,7 @@ def gen_prototxt(nangles,
     for o in range(max_order):
         layer = []
         for s in scales:
-            kernel_size = s * filter_size_factor
+            kernel_size = s * filter_size_factor * 2
             delta_offset = kernel_size // 2
 
             for c0, s0, offset in layers[-1]:
@@ -104,7 +104,7 @@ def gen_prototxt(nangles,
     concat = L.Concat(*coefficients)
 
     # Do the final gaussian blur and resampling
-    kernel_size = scales[-1] * filter_size_factor
+    kernel_size = scales[-1] * filter_size_factor * 2
     stride = scales[-1]
     c = conv_layer(concat,
                    dim=dim_total,
@@ -137,7 +137,7 @@ def generate_filters(net, **kwargs):
         keys = [k for k in net.params.keys() if name in k]
 
         for ai, a in enumerate(np.linspace(0, np.pi, nangles, endpoint=False)):
-            kernel_size = s * filter_size_factor
+            kernel_size = s * filter_size_factor * 2
             kernel = wavelet.morlet(s, a, kernel_size)
 
             for k in keys:
@@ -147,7 +147,7 @@ def generate_filters(net, **kwargs):
                     net.params[k][0].data[ai::nangles, :, :, :] = np.imag(kernel)
 
     s = scales[-1]
-    kernel_size = s * filter_size_factor
+    kernel_size = s * filter_size_factor * 2
     gauss_kernel = wavelet.gauss_kernel(s, kernel_size)
     net.params['psi'][0].data[:, :, :, :] = gauss_kernel
 
@@ -158,27 +158,34 @@ def scatnet(**kwargs):
     return net
 
 
-def split_to_input_channels(input, nangles,
-                 max_order,
-                 scales,
-                 nchannels_input=3):
-
-
+def get_layers_sizes(nangles,
+                     max_order,
+                     scales,
+                     nchannels_input=3):
     dim_total = nchannels_input
-    layers = [[dim_total, 0]]
+    layers = [[(dim_total, 0)]]
     for o in range(max_order):
         layer = []
         for s in scales:
-
-            for c0, s0, offset in layers[-1]:
-                if s0[-1] is not None and s <= s0[-1]:
+            for c0, s0 in layers[-1]:
+                if s0 is not None and s <= s0:
                     continue
                 dim_out = nchannels_input * nangles ** (o + 1)
                 dim_total += dim_out
 
-                layer.append((dim_out, s0 + [s]))
+                layer.append((dim_out, s))
 
         layers.append(layer)
+    steps = [x / 3 for x in zip(*reduce(operator.add, layers))[0]]
+
+    mask = np.zeros(dim_total, dtype='int')
+    i = 0
+    for d in steps:
+        for c in range(nchannels_input):
+            mask[i:i + d] = c
+            i += d
+
+    return mask
 
 
 if __name__ == '__main__':
