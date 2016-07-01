@@ -4,6 +4,11 @@ from caffe import params as P
 
 import tempfile
 
+DEFAULT_BATCH_SIZE = 32
+
+
+transform_param = dict(mirror=False, crop_size=227)
+
 weight_param = dict(lr_mult=1, decay_mult=1)
 bias_param = dict(lr_mult=2, decay_mult=0)
 learned_param = [weight_param, bias_param]
@@ -36,7 +41,8 @@ def max_pool(bottom, ks, stride=1):
 
 
 def caffenet(data, label=None, train=True, num_classes=1000,
-             classifier_name='fc8', learn_all=False, output_path = None):
+             classifier_name='fc8', learn_all=False, output_path=None, return_string=False,
+             learning_level=0):
     """Returns a NetSpec specifying CaffeNet, following the original proto text
        specification (./models/bvlc_reference_caffenet/train_val.prototxt)."""
     n = caffe.NetSpec()
@@ -73,11 +79,65 @@ def caffenet(data, label=None, train=True, num_classes=1000,
         n.loss = L.SoftmaxWithLoss(fc8, n.label)
         n.acc = L.Accuracy(fc8, n.label)
     # write the net to a temporary file and return its filename
+    proto_string = str(n.to_proto())
+    if return_string:
+        return proto_string
     if output_path:
         with open(output_path, 'w+') as f:
-            f.write(str(n.to_proto()))
+            f.write(proto_string)
             return f.name
     else:
         with tempfile.NamedTemporaryFile(delete=False) as f:
-            f.write(str(n.to_proto()))
+            f.write(proto_string)
             return f.name
+
+
+if __name__ == '__main__':
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source')
+    parser.add_argument('-t', '--data_type', type=str, default='lmdb')
+    parser.add_argument('-l', '--learning_level', default=0)
+    parser.add_argument('--learn_all', default=False, action='store_true')
+    parser.add_argument('-m', '--mirror', type=bool, default=False)
+    parser.add_argument('-c', '--nclasses', type=int, default=1000)
+    parser.add_argument('-n', '--name', type=str, default='fc8')
+    parser.add_argument('--test', dest='train', action='store_false')
+    parser.add_argument('--train', dest='train', action='store_true')
+    parser.set_defaults(train=True)
+    parser.add_argument('-b', '--batch_size', type=int, default=DEFAULT_BATCH_SIZE)
+    args = parser.parse_args()
+
+    transform_param = dict(mirror=args.mirror, crop_size=227, mean_value=128, scale=1./128)
+
+    if args.data_type == 'list':
+        data_layer, label_layer = L.ImageData(
+            transform_param=transform_param,
+            source=args.source,
+            batch_size=args.batch_size,
+            new_height=256,
+            new_width=256,
+            ntop=2)
+
+    elif args.data_type == 'lmdb':
+        data_layer, label_layer = L.Data(
+            transform_param=transform_param,
+            batch_size=args.batch_size,
+            backend=P.Data.LMDB,
+            source=args.source,
+            ntop=2)
+    else:
+        raise Exception('unsupported data type %s' % args.data_type)
+
+    proto_string = caffenet(data=data_layer,
+                            label=label_layer,
+                            train=args.train,
+                            num_classes=args.nclasses,
+                            learn_all=args.learn_all,
+                            learning_level=args.learning_level,
+                            classifier_name=args.name,
+                            return_string=True)
+
+    sys.stdout.write(proto_string)

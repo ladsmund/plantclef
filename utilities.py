@@ -48,7 +48,7 @@ def vis_square(data):
     data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
     data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
 
-    plt.imshow(data);
+    plt.imshow(data,interpolation='none')
     plt.axis('off')
 
 

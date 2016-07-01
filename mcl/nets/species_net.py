@@ -1,6 +1,8 @@
+import sys
 import os
 from caffe import layers as L
 from caffe_net import caffenet
+import argparse
 
 DEFAULT_DATA_PATH = os.path.join(os.getcwd(), 'data')
 
@@ -33,3 +35,8 @@ def speciesnet(train=True, learn_all=False, source=None, num_classes=None, **kwa
                     classifier_name='fc8_plant',
                     learn_all=learn_all,
                     **kwargs)
+
+
+
+
+
