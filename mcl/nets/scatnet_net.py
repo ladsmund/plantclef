@@ -5,7 +5,8 @@ from caffe import layers as L
 from caffe import params as P
 import tempfile
 import operator
-
+import time
+import os
 import wavelet
 
 EltwiseParameter_EltwiseOp_PROD = 0
@@ -157,6 +158,13 @@ def scatnet(**kwargs):
     generate_filters(net, **kwargs)
     return net
 
+def get_arg_string(**kwargs):
+    args = []
+    args.append("a%s" % str(kwargs['nangles']))
+    args.append("m%s" % str(kwargs['max_order']))
+    args.append("s%s" % "s".join(map(str,kwargs['scales'])))
+    args.append("f%s" % str(kwargs['filter_size_factor']))
+    return "_".join(args)
 
 def get_layers_sizes(nangles,
                      max_order,
@@ -188,17 +196,108 @@ def get_layers_sizes(nangles,
     return mask
 
 
+def process(*args, **kwargs):
+    # TODO: Forward propagate images
+    # TODO: Normalize and convert to uint8
+    # TODO: Write to LMDB
+    # TODO: produce mean value
+    # TODO: Save model and prototxt
+
+
+    caffe.set_mode_gpu()
+
+    input_path = kwargs.pop('input_path')
+
+    output_dir_path = os.path.join(kwargs.pop('output_path'),get_arg_string(**kwargs))
+    output_float_path = os.path.join(output_dir_path, 'float32')
+    output_info_list = os.path.join(output_dir_path, 'list.txt')
+    output_lmdb_path = os.path.join(output_dir_path, 'lmdb')
+    output_mean_path = os.path.join(output_dir_path, 'mean_coefficient.npy')
+    output_mean_mag_path = os.path.join(output_dir_path, 'mean_coefficient_magnitude.npy')
+
+    if not os.path.exists(output_dir_path):
+        os.makedirs(output_dir_path)
+    if not os.path.exists(output_float_path):
+        os.makedirs(output_float_path)
+
+    image_infos = open(input_path, 'r').read().split('\n')[:140]
+
+    nimages = len(image_infos)
+
+    # Prepare network
+    transform_param = dict(mirror=False, crop_size=227)
+    species_data, species_label = L.ImageData(transform_param=transform_param,
+                                              source=input_path,
+                                              batch_size=1,
+                                              new_height=256,
+                                              new_width=256,
+                                              ntop=2)
+    net = scatnet(data=species_data, **kwargs)
+
+
+    print kwargs
+
+    mean_coefficient = None
+    info_file = open(output_info_list,'w+')
+
+    print "Generate Scattering Coefficients"
+    t0 = time.time()
+    for i, image_info in enumerate(image_infos):
+        if not i % 100:
+            dt = time.time() - t0
+            progress_str = "%i/%i" % (i, nimages)
+            fps = i / dt
+            proc_time = 1000 * dt / i if i > 0 else 0
+            msg = "%11s, %5.1f img/s, %5.1f ms/img" % (progress_str, fps, proc_time)
+            print msg
+
+        net.forward()
+        output = net.blobs['output'].data
+
+        if mean_coefficient is None:
+            mean_coefficient = output.copy()
+        else:
+            mean_coefficient += output.copy()
+
+        base = os.path.basename(image_info.split()[0])
+        label = image_info.split()[1]
+
+        file_name = os.path.splitext(base)[0] + '.npy'
+        file_path = os.path.join(output_float_path, file_name)
+        output.tofile(file_path)
+
+        info_file.write("%s %s\n" % (file_path, label))
+
+
+    print "Save mean coefficients and mean magnitude"
+    mean_coefficient /= nimages
+    mean_coefficient.tofile(output_mean_path)
+    coeff_power = np.power(mean_coefficient, 2)
+    coeff_sq_sum = np.sum(np.sum(coeff_power, 2), 2)
+    coeff_mag = np.sqrt(coeff_sq_sum[0])
+    coeff_mag.tofile(output_mean_mag_path)
+
+
 if __name__ == '__main__':
+    # TODO: Support an explicit list of scales
+    import argparse
 
-    scale = 3
-    scales = 2 ** np.arange(0, scale)
-    max_order = 3
-    nangles = 6
-    filter_size_factor = 3
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input_path')
+    parser.add_argument('-o', '--output_path', required=True, type=str)
+    parser.add_argument('-a', '--nangles', type=int, default=4)
+    parser.add_argument('-s', '--scale', type=int, default=3)
+    parser.add_argument('-m', '--max_order', type=int, default=3)
+    parser.add_argument('-v', '--verbose', type=bool, default=False)
+    parser.add_argument('--filter_size_factor', type=int, default=2)
+    args = parser.parse_args()
 
-    net = scatnet(scales=scales, max_order=max_order, nangles=nangles, verbose=True,
-                  filter_size_factor=filter_size_factor)
-    print "\n\n" + "-" * 30
-    for k in net.blobs.keys():
-        if "split" in k:
-            print "%s: %s" % (k, str(net.blobs[k].data.shape))
+    scales = 2 ** np.arange(0, args.scale)
+
+    process(input_path=args.input_path,
+            output_path=args.output_path,
+            scales=scales,
+            max_order=args.max_order,
+            nangles=args.nangles,
+            verbose=args.verbose,
+            filter_size_factor=args.filter_size_factor)
