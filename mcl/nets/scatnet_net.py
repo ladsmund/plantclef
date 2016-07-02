@@ -198,7 +198,7 @@ def get_layers_sizes(nangles,
     return mask
 
 
-def process(*args, **kwargs):
+def process_multiple(*args, **kwargs):
     # TODO: Forward propagate images
     # TODO: Normalize and convert to uint8
     # TODO: Write to LMDB
@@ -215,7 +215,7 @@ def process(*args, **kwargs):
     output_info_list = os.path.join(output_dir_path, 'list.txt')
     output_lmdb_path = os.path.join(output_dir_path, 'lmdb')
     output_mean_path = os.path.join(output_dir_path, 'mean_coefficient.npy')
-    output_mean_mag_path = os.path.join(output_dir_path, 'mean_coefficient_magnitude.npy')
+    output_mag_path = os.path.join(output_dir_path, 'coefficient_magnitude.npy')
 
     if not os.path.exists(output_dir_path):
         os.makedirs(output_dir_path)
@@ -238,11 +238,14 @@ def process(*args, **kwargs):
                                               new_width=256,
                                               ntop=2)
     net = scatnet(data=species_data, **kwargs)
+    shape = net.blobs['output'].data.shape[1:]
 
     print "Output folder:\n %s" % output_dir_path
     print kwargs
 
-    mean_coefficient = None
+    mean_coefficient = np.zeros(shape=shape, dtype='float32')
+    coeff_magnitudes = np.zeros((shape[0], nimages), dtype='float32')
+
     info_file = open(output_info_list, 'w+')
 
     print "Generate Scattering Coefficients"
@@ -257,12 +260,10 @@ def process(*args, **kwargs):
             print msg
 
         net.forward()
-        output = net.blobs['output'].data
+        output = net.blobs['output'].data[0,...].copy()
 
-        if mean_coefficient is None:
-            mean_coefficient = output.copy()
-        else:
-            mean_coefficient += output.copy()
+        mean_coefficient += output
+        coeff_magnitudes[:,i] = np.sqrt(np.sum(np.sum(output**2,1),1))
 
         base = os.path.basename(image_info.split()[0])
         label = image_info.split()[1]
@@ -273,13 +274,12 @@ def process(*args, **kwargs):
 
         info_file.write("%s %s\n" % (file_path, label))
 
+    open(os.path.join(output_dir_path, 'shape.txt'),'w+').write(str(shape))
+
     print "Save mean coefficients and mean magnitude"
     mean_coefficient /= nimages
     mean_coefficient.tofile(output_mean_path)
-    coeff_power = np.power(mean_coefficient, 2)
-    coeff_sq_sum = np.sum(np.sum(coeff_power, 2), 2)
-    coeff_mag = np.sqrt(coeff_sq_sum[0])
-    coeff_mag.tofile(output_mean_mag_path)
+    coeff_magnitudes.tofile(output_mag_path)
 
 
 if __name__ == '__main__':
@@ -299,11 +299,11 @@ if __name__ == '__main__':
 
     scales = 2 ** np.arange(0, args.scale)
 
-    process(input_path=args.input_path,
-            output_path=args.output_path,
-            scales=scales,
-            max_order=args.max_order,
-            nangles=args.nangles,
-            verbose=args.verbose,
-            nimages=args.nimages,
-            filter_size_factor=args.filter_size_factor)
+    process_multiple(input_path=args.input_path,
+                     output_path=args.output_path,
+                     scales=scales,
+                     max_order=args.max_order,
+                     nangles=args.nangles,
+                     verbose=args.verbose,
+                     nimages=args.nimages,
+                     filter_size_factor=args.filter_size_factor)
