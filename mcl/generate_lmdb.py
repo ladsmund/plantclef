@@ -33,44 +33,38 @@ def serialize_labels(label):
 
 
 def process(path, mean_value = DEFAULT_MEAN_VALUE):
-    path_infos = os.path.join(path, 'list.txt')
-    path_shape = os.path.join(path, 'shape.txt')
-    path_mean = os.path.join(path, 'lmdb_mean.txt')
     path_data = os.path.join(path, 'lmdb_data')
     path_labels = os.path.join(path, 'lmdb_labels')
 
+    path_infos = os.path.join(path, 'list.txt')
     image_infos = open(path_infos, 'r').read().split('\n')
     image_infos = [i.split() for i in image_infos if len(i) > 1]
     nelements = len(image_infos)
 
+    path_shape = os.path.join(path, 'shape.txt')
     shape = ast.literal_eval(open(path_shape, 'r').read())
 
-    mag_path = os.path.join(path, 'coefficient_magnitude.npy')
-    print (shape[0], nelements)
-    
-    mag = np.fromfile(mag_path, dtype='float32')
-    print "shape shape: ", np.prod((shape[0], nelements))
-    print "mag.shape: ", mag.shape
-    mag = mag.reshape((shape[0], nelements))
-    mean_mag = np.mean(mag,1)
+    channel_norm_factor_path = os.path.join(path, 'channel_norm_factor.npy')
+    channel_norm_factor = np.fromfile(channel_norm_factor_path, dtype='float32')
+    print "channel_norm_factor.shape: ", channel_norm_factor.shape
     def normalize(data):
-        for i, mn in enumerate(mean_mag):
-            if mn > 0:
-                data[i,...] /= mn
-                data[i,...] -= 1
-            data[i,...] /= 2
-            data[i,...] *= 128
-            data[i,...] += mean_value
-            data[i,...] = np.clip(data[i,...], a_min=0, a_max=255)
-        return np.uint8(data)
-    open(path_mean,'w+').write(str(mean_value))
+        data = data.copy()
+        for i, v in enumerate(channel_norm_factor):
+            data[i,...] *= v
+        return np.uint8(255*data)
+
+    # Normalize and save mean coefficients
+    mean_coefficients_path = os.path.join(path, 'mean_coefficients.npy')
+    mean_coefficients = np.fromfile(mean_coefficients_path, dtype='float32').reshape(shape)
+    lmdb_mean_coeff_path = os.path.join(path, 'lmdb_mean_coeff.npy')
+    lmdb_mean_coeff = normalize(mean_coefficients)
+    lmdb_mean_coeff.tofile(lmdb_mean_coeff_path)
 
     # Determine map size
-    scat_coeff = read_scat_coeff(image_infos[0][0], shape)
-    scat_coeff_serial = serialize_data(scat_coeff, 0)
-    datum_size = len(scat_coeff_serial)
+    datum_size = len(serialize_data(lmdb_mean_coeff, 0))
     map_size = nelements * datum_size
 
+    # Initialize LMDB data bases
     env_data = lmdb.open(path_data, map_size=10 * map_size)
     env_labels = lmdb.open(path_labels)
     txn_data = env_data.begin(write=True)

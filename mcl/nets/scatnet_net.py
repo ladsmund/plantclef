@@ -213,9 +213,13 @@ def process_multiple(*args, **kwargs):
     output_dir_path = os.path.join(kwargs.pop('output_path'), get_arg_string(**kwargs))
     output_float_path = os.path.join(output_dir_path, 'float32')
     output_info_list = os.path.join(output_dir_path, 'list.txt')
-    output_lmdb_path = os.path.join(output_dir_path, 'lmdb')
-    output_mean_path = os.path.join(output_dir_path, 'mean_coefficient.npy')
-    output_mag_path = os.path.join(output_dir_path, 'coefficient_magnitude.npy')
+
+    mean_coefficients_path = os.path.join(output_dir_path, 'mean_coefficients.npy')
+    channel_maximum_path = os.path.join(output_dir_path, 'channel_maximum.npy')
+    channel_magnitude_path = os.path.join(output_dir_path, 'channel_magnitude.npy')
+    magnorm_maximum_coeff_path = os.path.join(output_dir_path, 'magnorm_maximum_coeff.npy')
+    channel_norm_factor_path = os.path.join(output_dir_path, 'channel_norm_factor.npy')
+
 
     if not os.path.exists(output_dir_path):
         os.makedirs(output_dir_path)
@@ -239,18 +243,29 @@ def process_multiple(*args, **kwargs):
                                               ntop=2)
     net = scatnet(data=species_data, **kwargs)
     shape = net.blobs['output'].data.shape[1:]
+    dtype = net.blobs['output'].data.dtype
+
+    def run_next():
+        i = 0
+        while image_infos:
+            info = image_infos.pop(0)
+            net.forward()
+            output = net.blobs['output'].data.copy()[0, ...]
+            yield i, info, output
+            i += 1
 
     print "Output folder:\n %s" % output_dir_path
     print kwargs
 
-    mean_coefficient = np.zeros(shape=shape, dtype='float32')
-    coeff_magnitudes = np.zeros((shape[0], nimages), dtype='float32')
+    mean_coefficients = np.zeros(shape=shape, dtype='float32')
+    max_coefficients = np.zeros(shape=shape, dtype='float32')
+    channel_magnitudes = np.zeros((shape[0], nimages), dtype='float32')
 
     info_file = open(output_info_list, 'w+')
 
     print "Generate Scattering Coefficients"
     t0 = time.time()
-    for i, image_info in enumerate(image_infos):
+    for i, image_info, output in run_next():
         if not i % 100:
             dt = time.time() - t0
             progress_str = "%i/%i" % (i, nimages)
@@ -259,11 +274,9 @@ def process_multiple(*args, **kwargs):
             msg = "%11s, %5.1f img/s, %5.1f ms/img" % (progress_str, fps, proc_time)
             print msg
 
-        net.forward()
-        output = net.blobs['output'].data[0,...].copy()
-
-        mean_coefficient += output
-        coeff_magnitudes[:,i] = np.sqrt(np.sum(np.sum(output**2,1),1))
+        mean_coefficients += output / nimages
+        max_coefficients = np.maximum(output, max_coefficients)
+        channel_magnitudes[:, i] = np.sqrt(np.sum(np.sum(output ** 2, 1), 1))
 
         base = os.path.basename(image_info.split()[0])
         label = image_info.split()[1]
@@ -274,12 +287,19 @@ def process_multiple(*args, **kwargs):
 
         info_file.write("%s %s\n" % (file_path, label))
 
-    open(os.path.join(output_dir_path, 'shape.txt'),'w+').write(str(shape))
+    open(os.path.join(output_dir_path, 'shape.txt'), 'w+').write(str(shape))
 
     print "Save mean coefficients and mean magnitude"
-    mean_coefficient /= nimages
-    mean_coefficient.tofile(output_mean_path)
-    coeff_magnitudes.tofile(output_mag_path)
+    channel_maximum = np.max(np.max(max_coefficients, 1), 1)
+    channel_magnitude = np.max(channel_magnitudes, 1)
+    magnorm_maximum_coeff = np.max(channel_maximum / channel_magnitude)
+    channel_norm_factor = 1 / (channel_magnitude * magnorm_maximum_coeff)
+
+    channel_maximum.tofile(channel_maximum_path)
+    channel_magnitude.tofile(channel_magnitude_path)
+    magnorm_maximum_coeff.tofile(magnorm_maximum_coeff_path)
+    channel_norm_factor.tofile(channel_norm_factor_path)
+    mean_coefficients.tofile(mean_coefficients_path)
 
 
 if __name__ == '__main__':
