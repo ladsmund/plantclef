@@ -4,8 +4,44 @@ import numpy as np
 import caffe
 import lmdb
 import time
+import PIL.Image
+from datetime import datetime
 
 DEFAULT_MEAN_VALUE = 64
+
+
+def _save_image(image, filename):
+    # converting from BGR to RGB
+    image = image[[2, 1, 0], ...]  # channel swap
+    # convert to (height, width, channels)
+    image = image.astype('uint8').transpose((1, 2, 0))
+    image = PIL.Image.fromarray(image)
+    image.save(filename)
+
+
+def _save_mean(mean, filename):
+    """
+    Saves mean to file
+
+    Arguments:
+    mean -- the mean as an np.ndarray
+    filename -- the location to save the image
+    """
+    if filename.endswith('.binaryproto'):
+        blob = caffe.proto.caffe_pb2.BlobProto()
+        blob.num = 1
+        blob.channels = mean.shape[0]
+        blob.height = mean.shape[1]
+        blob.width = mean.shape[2]
+        blob.data.extend(mean.astype(float).flat)
+        with open(filename, 'wb') as outfile:
+            outfile.write(blob.SerializeToString())
+
+    elif filename.endswith(('.jpg', '.jpeg', '.png')):
+        _save_image(mean, filename)
+    else:
+        raise ValueError('unrecognized file extension')
+
 
 def get_id_from_path(path):
     return os.path.splitext(os.path.basename(path))[0]
@@ -32,7 +68,7 @@ def serialize_labels(label):
     return datum.SerializeToString()
 
 
-def process(path, mean_value = DEFAULT_MEAN_VALUE):
+def process(path, mean_value=DEFAULT_MEAN_VALUE):
     path_data = os.path.join(path, 'lmdb_data')
     path_labels = os.path.join(path, 'lmdb_labels')
 
@@ -47,18 +83,19 @@ def process(path, mean_value = DEFAULT_MEAN_VALUE):
     channel_norm_factor_path = os.path.join(path, 'channel_norm_factor.npy')
     channel_norm_factor = np.fromfile(channel_norm_factor_path, dtype='float32')
     print "channel_norm_factor.shape: ", channel_norm_factor.shape
+
     def normalize(data):
         data = data.copy()
         for i, v in enumerate(channel_norm_factor):
-            data[i,...] *= v
-        return np.uint8(255*data)
+            data[i, ...] *= v
+        return np.uint8(255 * data)
 
     # Normalize and save mean coefficients
     mean_coefficients_path = os.path.join(path, 'mean_coefficients.npy')
     mean_coefficients = np.fromfile(mean_coefficients_path, dtype='float32').reshape(shape)
-    lmdb_mean_coeff_path = os.path.join(path, 'lmdb_mean_coeff.npy')
     lmdb_mean_coeff = normalize(mean_coefficients)
-    lmdb_mean_coeff.tofile(lmdb_mean_coeff_path)
+    _save_mean(lmdb_mean_coeff, os.path.join(path, 'lmdb_mean_coeff.binaryproto'))
+    _save_mean(lmdb_mean_coeff, os.path.join(path, 'lmdb_mean_coeff.png'))
 
     # Determine map size
     datum_size = len(serialize_data(lmdb_mean_coeff, 0))
@@ -72,8 +109,8 @@ def process(path, mean_value = DEFAULT_MEAN_VALUE):
 
     t0 = time.time()
     for i, [path_scat, label] in enumerate(image_infos):
-        if not i % 100:
-            print "%i: %.1f" % (i, i / (time.time() - t0))
+        if not i % 1000:
+            print "%s: %i: %.1f" % (str(datetime.now()), i, i / (time.time() - t0))
 
         id = get_id_from_path(path_scat)
         str_id = bytes(id)
