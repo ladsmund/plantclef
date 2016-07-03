@@ -6,6 +6,7 @@ from caffe import params as P
 import tempfile
 import operator
 import time
+from datetime import datetime
 import os
 import wavelet
 
@@ -266,12 +267,12 @@ def process_multiple(*args, **kwargs):
     print "Generate Scattering Coefficients"
     t0 = time.time()
     for i, image_info, output in run_next():
-        if not i % 100:
+        if not i % 1000:
             dt = time.time() - t0
             progress_str = "%i/%i" % (i, nimages)
             fps = i / dt
             proc_time = 1000 * dt / i if i > 0 else 0
-            msg = "%11s, %5.1f img/s, %5.1f ms/img" % (progress_str, fps, proc_time)
+            msg = "%s: %11s, %5.1f img/s, %5.1f ms/img" % (str(datetime.now()), progress_str, fps, proc_time)
             print msg
 
         mean_coefficients += output / nimages
@@ -301,6 +302,7 @@ def process_multiple(*args, **kwargs):
     channel_norm_factor.tofile(channel_norm_factor_path)
     mean_coefficients.tofile(mean_coefficients_path)
 
+    return output_dir_path, output_float_path
 
 if __name__ == '__main__':
     # TODO: Support an explicit list of scales
