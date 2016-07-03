@@ -78,8 +78,9 @@ def process(path, mean_value = DEFAULT_MEAN_VALUE):
         id = get_id_from_path(path_scat)
         str_id = bytes(id)
 
-        scat_coeff = read_scat_coeff(image_infos[0][0], shape)
+        scat_coeff = read_scat_coeff(path_scat, shape)
         scat_coeff_serial = serialize_data(normalize(scat_coeff), 0)
+
         label_serial = serialize_labels(label)
 
         txn_data.replace(str_id.encode('ascii'), scat_coeff_serial)
