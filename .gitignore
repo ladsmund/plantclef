@@ -1,4 +1,5 @@
 models/
+mcl/scratch/
 .ipynb_checkpoints/
 .DS_Store/
 .AppleDouble/
@@ -8,3 +9,5 @@ legacy/
 figures/
 *.pyc
 .idea
+scat_mean.npy
+scat_var.npy
