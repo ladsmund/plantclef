@@ -1,0 +1,159 @@
+layer {
+  name: "train-data"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    mirror: true
+    crop_size: 227
+    mean_file: "/home/zml374/workspace/DIGITS/digits/jobs/20160704-085910-0cc9/mean.binaryproto"
+  }
+  data_param {
+    source: "/home/zml374/workspace/DIGITS/digits/jobs/20160704-085910-0cc9/train_db"
+    batch_size: 200
+    backend: LMDB
+  }
+}
+layer {
+  name: "val-data"
+  type: "Data"
+  top: "data"
+  top: "label"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    crop_size: 227
+    mean_file: "/home/zml374/workspace/DIGITS/digits/jobs/20160704-085910-0cc9/mean.binaryproto"
+  }
+  data_param {
+    source: "/home/zml374/workspace/DIGITS/digits/jobs/20160704-085910-0cc9/val_db"
+    batch_size: 200
+    backend: LMDB
+  }
+}
+layer {
+  name: "fc6_clean"
+  type: "InnerProduct"
+  bottom: "data"
+  top: "fc6_clean"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 2.0
+    decay_mult: 0.0
+  }
+  inner_product_param {
+    num_output: 4096
+    weight_filler {
+      type: "gaussian"
+      std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.1
+    }
+  }
+}
+layer {
+  name: "relu6"
+  type: "ReLU"
+  bottom: "fc6_clean"
+  top: "fc6_clean"
+}
+layer {
+  name: "drop6"
+  type: "Dropout"
+  bottom: "fc6_clean"
+  top: "fc6_clean"
+  dropout_param {
+    dropout_ratio: 0.5
+  }
+}
+layer {
+  name: "fc7_clean"
+  type: "InnerProduct"
+  bottom: "fc6_clean"
+  top: "fc7_clean"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 2.0
+    decay_mult: 0.0
+  }
+  inner_product_param {
+    num_output: 4096
+    weight_filler {
+      type: "gaussian"
+      std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.1
+    }
+  }
+}
+layer {
+  name: "relu7"
+  type: "ReLU"
+  bottom: "fc7_clean"
+  top: "fc7_clean"
+}
+layer {
+  name: "drop7"
+  type: "Dropout"
+  bottom: "fc7_clean"
+  top: "fc7_clean"
+  dropout_param {
+    dropout_ratio: 0.5
+  }
+}
+layer {
+  name: "fc8_clean"
+  type: "InnerProduct"
+  bottom: "fc7_clean"
+  top: "fc8_clean"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 2.0
+    decay_mult: 0.0
+  }
+  inner_product_param {
+    num_output: 967
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+      value: 0.0
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "fc8_clean"
+  bottom: "label"
+  top: "accuracy"
+  include {
+    phase: TEST
+  }
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "fc8_clean"
+  bottom: "label"
+  top: "loss"
+}
