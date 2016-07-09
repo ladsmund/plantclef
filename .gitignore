@@ -11,3 +11,4 @@ figures/
 .idea
 scat_mean.npy
 scat_var.npy
+test_scat.m
