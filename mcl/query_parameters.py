@@ -29,7 +29,7 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_path', nargs='1')
+    parser.add_argument('input_path')
     parser.add_argument('-e','--exclude_path')
     parser.add_argument('-r','--redo', type=bool, default=False)
 
