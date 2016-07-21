@@ -9,7 +9,6 @@ layer {
   transform_param {
     mirror: true
     crop_size: 227
-    mean_file: "/usr/share/digits/digits/jobs/20160624-120053-bb9a/mean.binaryproto"
   }
   data_param {
     source: "/usr/share/digits/digits/jobs/20160624-120053-bb9a/train_db"
@@ -27,7 +26,6 @@ layer {
   }
   transform_param {
     crop_size: 227
-    mean_file: "/usr/share/digits/digits/jobs/20160624-120053-bb9a/mean.binaryproto"
   }
   data_param {
     source: "/usr/share/digits/digits/jobs/20160624-120053-bb9a/val_db"
