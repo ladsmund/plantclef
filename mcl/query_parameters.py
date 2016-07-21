@@ -29,38 +29,32 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_paths', nargs='+')
-    parser.add_argument('-o','--output_path')
+    parser.add_argument('input_path', nargs='1')
+    parser.add_argument('-e','--exclude_path')
     parser.add_argument('-r','--redo', type=bool, default=False)
 
     args = parser.parse_args()
 
 
-    if os.path.exists(args.output_path) and not args.redo:
-        lines = open(args.output_path,'r').readlines()
+    if os.path.exists(args.exclude_path) and not args.redo:
+        lines = open(args.exclude_path,'r').readlines()
         results = {l.split()[0]: l.split()[1:] for l in lines}
     else:
         results = dict()
 
-    output = open(args.output_path,'w+')
+    input_path = args.input_path
+    proto_path = os.path.join(input_path, 'train_val.prototxt')
+    base = os.path.basename(input_path)
 
-    for input_path in args.input_paths:
-        proto_path = os.path.join(input_path, 'train_val.prototxt')
-        base = os.path.basename(input_path)
+    # if base not in exps:
+    #     continue
 
-        # if base not in exps:
-        #     continue
+    if base in results.keys():
+        exit()
 
-        if base in results.keys():
-            continue
+    try:
+        res = str(query_parameters(proto_path))
+    except RuntimeError as e:
+        res = 'Skipped'
 
-        try:
-            res = str(query_parameters(proto_path))
-        except RuntimeError as e:
-            res = 'Skipped'
-
-        results[base] = res
-
-
-    output.write("\n".join(["%s %s" % item for item  in results.items()]))
-    output.close()
+    print base, res
