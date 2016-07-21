@@ -30,7 +30,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('input_paths', nargs='+')
+    parser.add_argument('-o','--output_path')
+    parser.add_argument('-r','--redo', type=bool, default=False)
+
     args = parser.parse_args()
+
+
+    if os.path.exists(args.output_path) and not args.redo:
+        lines = open(args.output_path,'r').readlines()
+        results = {l.split()[0]: l.split()[1:] for l in lines}
+    else:
+        results = dict()
+
 
     for input_path in args.input_paths:
         proto_path = os.path.join(input_path, 'train_val.prototxt')
@@ -39,10 +50,14 @@ if __name__ == '__main__':
         if base not in exps:
             continue
 
+        if base in results.keys():
+            continue
+
         try:
             res = str(query_parameters(proto_path))
         except RuntimeError as e:
             res = 'Skipped'
 
-        print base, res
+        results[base] = res
 
+    print "\n".join(["%s %s" % item for item  in results.items()])
