@@ -25,7 +25,7 @@ def gauss_kernel(sigma, size=None):
     return kernel / np.sum(kernel)
 
 
-def morlet1d(sigma, size=None, angle_freq=DEFAULT_XI):
+def morlet1d(sigma, size=None, angle_freq=DEFAULT_XI, return_components=False):
     if size is None:
         size = int(DEFAULT_SIZE * sigma)
     n = size // 2
@@ -44,10 +44,13 @@ def morlet1d(sigma, size=None, angle_freq=DEFAULT_XI):
     beta = sum0 / sum_envelope
     wavelet = np.multiply(carrier - beta, envelope)
 
+    if return_components:
+        return wavelet, envelope, carrier
+
     return wavelet
 
 
-def morlet(sigma, angle, size=None, angle_freq=DEFAULT_XI):
+def morlet(sigma, angle, size=None, angle_freq=DEFAULT_XI, return_components=False):
     if size is None:
         size = int(DEFAULT_SIZE * sigma)
 
@@ -70,5 +73,8 @@ def morlet(sigma, angle, size=None, angle_freq=DEFAULT_XI):
     # square_norm = np.sum(np.power(np.abs(wavelet), 2))
     # alpha = 1. / np.sqrt(square_norm)
     # wavelet = alpha * wavelet
+
+    if return_components:
+        return wavelet, envelope, carrier
 
     return wavelet
