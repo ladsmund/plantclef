@@ -49,12 +49,13 @@ def gen_prototxt(nangles,
                  scales,
                  filter_size_factor=wavelet.DEFAULT_SIZE,
                  nchannels_input=3,
+                 intput_shape=[256,256],
                  data=None,
                  verbose=False,
                  output_path=None):
     n = caffe.NetSpec()
     if data is None:
-        data = L.Input(shape=dict(dim=[1, nchannels_input, 256, 256]))
+        data = L.Input(shape=dict(dim=[1, nchannels_input] + intput_shape))
 
     n.data = data
 
