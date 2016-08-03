@@ -112,14 +112,10 @@ if __name__ == '__main__':
 
         print "-" * 30
         print iteration
-        print m
-        break
 
     pickle.dump(all_diffs, open(os.path.join(output_path, "filter_diff_%s.pickle" % net_id),'w+'))
 
     for iteration, v in sorted(all_diffs.items()):
         print iteration
         for k, f_diff in sorted(v.items()):
-            print (k, f_diff)
-            print (type(k), type(f_diff))
             print "  %s: %4.f" % (k, f_diff)
