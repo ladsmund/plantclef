@@ -122,4 +122,4 @@ if __name__ == '__main__':
         for k, f_diff in sorted(v.items()):
             print (k, f_diff)
             print (type(k), type(f_diff))
-            print " %i: %4.f" % (k, f_diff)
+            print "  %s: %4.f" % (k, f_diff)
