@@ -1,6 +1,7 @@
 import scipy
 import numpy as np
 import caffe
+import pickle
 
 
 def vis_square(data):
@@ -26,7 +27,7 @@ def vis_square(data):
     return data
 
 
-def query_parameters(net, caffemodel = None):
+def query_parameters(net, caffemodel=None):
     if caffemodel:
         net.copy_from(caffemodel)
 
@@ -46,6 +47,16 @@ def query_parameters_old(proto_path):
             params[k].append(p.data.shape)
     return params
 
+
+def save_filter_image(image_path, filter):
+    try:
+        filter_image = vis_square(filter.transpose(0, 2, 3, 1)[:, :, :, ::-1])
+        print "save %s" % image_path
+        scipy.misc.imsave(image_path, filter_image)
+    except Exception as e:
+        print "Error: ", e.message()
+
+
 if __name__ == '__main__':
     import os
     import argparse
@@ -54,6 +65,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Analyze filters')
     parser.add_argument('input_path')
     parser.add_argument('base_model_path')
+    parser.add_argument('output_path')
     parser.add_argument('-e', '--exclude_path')
     parser.add_argument('--export_filter')
     parser.add_argument('-r', '--redo', type=bool, default=False)
@@ -61,9 +73,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     input_path = args.input_path
+    output_path = args.output_path
+
     proto_path = os.path.join(input_path, 'train_val.prototxt')
     caffemodels_list = glob(os.path.join(input_path, '*.caffemodel'))
     caffemodels = {int(filename.split('.')[0].split('_')[-1]): filename for filename in caffemodels_list}
+
+    net_id = os.path.basename(input_path)
 
     basemodel = args.base_model_path
     export_filter = args.export_filter
@@ -72,6 +88,11 @@ if __name__ == '__main__':
 
     param_base = query_parameters(net, basemodel)
 
+    if export_filter in param_base:
+        image_name = "%s_0.png" % net_id
+        image_path = os.path.join(output_path, image_name)
+        save_filter_image(image_path, param_base[export_filter])
+
     all_diffs = dict()
     print "**" * 30
     print "loading models"
@@ -79,17 +100,9 @@ if __name__ == '__main__':
         param = query_parameters(net, caffemodel=m)
 
         if export_filter in param:
-            try:
-                filter = param[export_filter]
-                filter_image = vis_square(filter.transpose(0, 2, 3, 1)[:,:,:,::-1])
-
-                image_path = m.split('.')[0] + '.png'
-                print "save %s" % image_path
-
-                scipy.misc.imsave(image_path, filter_image)
-            except Exception as e:
-                print "Error: ", e.message()
-
+            image_name = "%s_%i.png" % (net_id, iteration)
+            image_path = os.path.join(output_path, image_name)
+            save_filter_image(image_path, param[export_filter])
 
         param_diff = dict()
         for k in param.keys():
@@ -97,13 +110,16 @@ if __name__ == '__main__':
 
         all_diffs[iteration] = param_diff
 
-        print "-"*30
+        print "-" * 30
         print iteration
         print m
+        break
+
+    pickle.dump(all_diffs, open(os.path.join(output_path, "filter_diff_%s.pickle" % net_id),'w+'))
 
     for iteration, v in sorted(all_diffs.items()):
         print iteration
         for k, f_diff in sorted(v.items()):
+            print (k, f_diff)
+            print (type(k), type(f_diff))
             print " %i: %4.f" % (k, f_diff)
-
-
