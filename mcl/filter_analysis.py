@@ -82,16 +82,20 @@ if __name__ == '__main__':
     net_id = os.path.basename(input_path)
 
     basemodel = args.base_model_path
+    if basemodel == 'None':
+        basemodel = None
     export_filter = args.export_filter
 
     net = caffe.Net(proto_path, caffe.TRAIN)
+    
+    param_base = None 
+    if basemodel:
+        param_base = query_parameters(net, basemodel)
 
-    param_base = query_parameters(net, basemodel)
-
-    if export_filter in param_base:
-        image_name = "%s_0.png" % net_id
-        image_path = os.path.join(output_path, image_name)
-        save_filter_image(image_path, param_base[export_filter])
+        if export_filter in param_base:
+            image_name = "%s_0.png" % net_id
+            image_path = os.path.join(output_path, image_name)
+            save_filter_image(image_path, param_base[export_filter])
 
     all_diffs = dict()
     print "**" * 30
@@ -104,6 +108,8 @@ if __name__ == '__main__':
             image_path = os.path.join(output_path, image_name)
             save_filter_image(image_path, param[export_filter])
 
+        if param_base is None:
+            param_base = param
         param_diff = dict()
         for k in param.keys():
             param_diff[k] = np.sum((param[k] - param_base[k]) ** 2)
