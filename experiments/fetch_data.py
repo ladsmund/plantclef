@@ -42,19 +42,28 @@ for l in fetch_digit_models():
     net_path = os.path.join(data_folder, '%s_net.prototxt' % net_id)
     if not os.path.exists(net_path):
         net_url = host + "/files/" + net_id + "/train_val.prototxt"
-        net_str = urllib.urlopen(net_url).read()
+        u = urllib.urlopen(net_url)
+        if u.getcode() == 404:
+            continue
+        net_str = u.read();
         open(net_path, 'wb').write(net_str)
 
     solver_path = os.path.join(data_folder, '%s_solver.prototxt' % net_id)
     if not os.path.exists(solver_path):
         solver_url = host + "/files/" + net_id + "/solver.prototxt"
-        solver_str = urllib.urlopen(solver_url).read()
+        u = urllib.urlopen(solver_url)
+        if u.getcode() == 404:
+            continue
+        solver_str = u.read();
         open(solver_path, 'wb').write(solver_str)
 
     log_path = os.path.join(data_folder, '%s_log.log' % net_id)
     if not os.path.exists(log_path):
         log_url = host + "/files/" + net_id + "/caffe_output.log"
-        log_str = urllib.urlopen(log_url).read()
+        u = urllib.urlopen(log_url)
+        if u.getcode() == 404:
+            continue
+        log_str = u.read();
         open(log_path, 'wb').write(log_str)
 
     # print get_net_info(net_id)
@@ -62,7 +71,10 @@ for l in fetch_digit_models():
     layers = map(lambda x: x[0], db.execute("SELECT layer_name FROM layers WHERE net_id='%s'" % net_id))
     for l in net_info['layers']:
 
+        l['layer_name'] = l['layer_name'].replace('species', 'clean')
+
         layer_name = l['layer_name']
+
         layer_number = l['layer_number']
         keys, values = zip(*filter(lambda i: i[1] is not None and i[0] in db_columns_layers, l.items()))
 

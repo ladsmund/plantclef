@@ -11,7 +11,7 @@ experiments_folder = os.path.dirname(os.path.dirname(os.path.realpath(__file__))
 db_path = os.path.join(experiments_folder, 'experiments.db')
 data_folder = os.path.join(experiments_folder, 'data')
 models_path = os.path.join(data_folder, 'digits_models.py')
-digits_servers = {0: 'http://localhost:5000', 1: 'http://localhost:5001'}
+digits_servers = {0: 'http://localhost:5000', 1: 'http://localhost:5002'}
 key_map = {
     'id': 'net_id',
     'name': 'name',
@@ -24,6 +24,7 @@ key_map = {
     'accuracy (val) last': 'accuracy_val_last',
     'learning_rate (train) max': 'learning_rate_train_max',
     'progress': 'progress',
+    'epoch (val) last': 'epoch_last',
     'status': 'status',
     'loss (train) last': 'loss_train_last',
     'loss (val) last': 'loss_val_last',
@@ -51,6 +52,7 @@ def _save_models(models, path=models_path):
 def fetch_digit_models(servers=digits_servers.copy()):
     models = []
     for i, addr in servers.items():
+        print i, addr
         response = urllib.urlopen(addr + "/completed_jobs.json")
         data = json.loads(response.read())
 
@@ -115,8 +117,14 @@ def get_param_info(net_id):
         path = os.path.join(data_folder, name)
         for l in open(path).readlines():
             key = l.split(' ', 1)[0]
-            if key == net_id:
-                return ast.literal_eval(l.split(' ', 1)[1])
+            if key == net_id and not "Skipped" in l.split(' ', 1)[1]:
+                try:
+                    return ast.literal_eval(l.split(' ', 1)[1])
+                except ValueError as e:
+                    print "Value Error:"
+                    print l.split(' ', 1)[1]
+                    raise e
+
     return None
 
 
@@ -199,7 +207,11 @@ def get_net_info(net_id):
             conv_params = l['convolution_param'][0]
             layer['kernel_size'] = conv_params.get('kernel_size')
             layer['stride'] = conv_params.get('stride')
-            layer['groups'] = conv_params.get('group')
+
+            if 'group' in conv_params:
+                layer['groups'] = int(conv_params['group'][0])
+            else:
+                layer['groups'] = None
 
         nparams = 0
         if layer_params:
